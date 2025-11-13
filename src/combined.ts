@@ -1,6 +1,7 @@
 import { init } from "./system/init.js";
 import { createQueues } from "./queues/index.js";
 import { startWorkers } from "./workers/index.js";
+import { initScheduledJobs } from "./schedules/index.js";
 import { startApiServer } from "./api/server.js";
 import { closeDb } from "./system/db.js";
 
@@ -12,6 +13,10 @@ async function main() {
   // 创建队列
   await createQueues(boss);
   console.info("Queues created successfully");
+
+  // 初始化定时任务
+  await initScheduledJobs(boss);
+  console.info("Scheduled jobs initialized successfully");
 
   // 启动 Workers
   await startWorkers(boss);

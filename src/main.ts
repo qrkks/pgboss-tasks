@@ -1,6 +1,7 @@
 import {init} from "./system/init.js";
 import {createQueues} from "./queues/index.js";
 import {startWorkers} from "./workers/index.js";
+import {initScheduledJobs} from "./schedules/index.js";
 import { closeDb } from "./system/db.js";
 
 async function main() {
@@ -9,6 +10,10 @@ async function main() {
 
   await createQueues(boss);
   console.info("Queues created successfully");
+
+  // 初始化定时任务
+  await initScheduledJobs(boss);
+  console.info("Scheduled jobs initialized successfully");
 
   await startWorkers(boss);
   console.info("Workers started successfully");

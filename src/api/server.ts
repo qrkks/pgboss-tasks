@@ -31,6 +31,39 @@ export async function startApiServer(boss: PgBoss, port: number = 3001) {
       }, 500);
     }
   });
+
+  // 发送邮件 job
+  app.post("/api/jobs/send-email", async (c) => {
+    try {
+      const body = await c.req.json();
+      
+      // 验证必需字段
+      if (!body.email || !body.subject || !body.text) {
+        return c.json({ 
+          success: false, 
+          error: "Missing required fields: email, subject, text" 
+        }, 400);
+      }
+      
+      const id = await boss.send("send-email-queue", {
+        email: body.email,
+        subject: body.subject,
+        text: body.text,
+      });
+      
+      return c.json({ 
+        success: true, 
+        jobId: id,
+        queue: "send-email-queue"
+      });
+    } catch (error) {
+      console.error("Failed to send email job:", error);
+      return c.json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      }, 500);
+    }
+  });
   
   serve({
     fetch: app.fetch,

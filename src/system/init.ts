@@ -29,7 +29,8 @@ export async function init(): Promise<PgBoss> {
     schema: "test_schema",
   });
 
-  boss.on("error", (error) => {
+  // PgBoss 继承自 EventEmitter，但类型定义可能不完整，使用类型断言
+  (boss as any).on("error", (error: Error) => {
     console.error("PgBoss error:", error);
   });
 

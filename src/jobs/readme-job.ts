@@ -8,7 +8,7 @@ export async function sendReadmeJob(boss: PgBoss) {
 }
 
 // 只在直接运行此文件时执行（类似 Python 的 if __name__ == "__main__"）
-if (isMainModule()) {
+if (isMainModule(import.meta.url)) {
   async function main() {
     const boss = await init();
     await sendReadmeJob(boss);

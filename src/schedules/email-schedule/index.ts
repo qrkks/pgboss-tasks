@@ -15,8 +15,8 @@ export async function initEmailSchedule(boss: PgBoss) {
   // 邮件发送的数据
   const emailData: SendEmailJobData = {
     email: "34028312@qq.com",
-    subject: "定时邮件",
-    text: "这是一封定时发送的邮件，来自 PgBoss 任务队列系统。",
+    subject: "定时邮件：该去抢云服务器了",
+    text: "这是一封定时发送的邮件，来自 PgBoss 任务队列系统。提醒该去抢云服务器了。",
   };
 
   try {

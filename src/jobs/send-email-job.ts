@@ -1,6 +1,5 @@
 import {PgBoss} from "pg-boss";
 import {init} from "../system/init.js";
-import {createQueues} from "../queues/index.js";
 import {isMainModule} from "../utils/is-main-module.js";
 
 interface SendEmailJobData {
@@ -16,7 +15,9 @@ export async function sendEmailJob(boss: PgBoss, data: SendEmailJobData) {
 }
 
 // 只在直接运行此文件时执行（类似 Python 的 if __name__ == "__main__"）
-if (isMainModule()) {
+// 传入当前文件的 import.meta.url 来检查
+
+if (isMainModule(import.meta.url)) {
   async function main() {
     const boss = await init();
 
@@ -34,4 +35,6 @@ if (isMainModule()) {
     console.error(err);
     process.exit(1);
   });
+} else {
+  console.log("Not running as main module, skipping main()");
 }

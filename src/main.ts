@@ -1,6 +1,7 @@
 import {init} from "./system/init.js";
 import {createQueues} from "./queues/index.js";
 import {startWorkers} from "./workers/index.js";
+import { closeDb } from "./system/db.js";
 
 async function main() {
   const boss = await init();
@@ -11,6 +12,17 @@ async function main() {
 
   await startWorkers(boss);
   console.info("Workers started successfully");
+
+  // 优雅关闭
+  const shutdown = async () => {
+    console.info("Shutting down...");
+    await closeDb();
+    await boss.stop();
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 main().catch((err: Error) => {

@@ -1,7 +1,7 @@
 import {PgBoss} from "pg-boss";
 import "dotenv/config";
 
-function getDatabaseUrl(): string {
+export function getDatabaseUrl(): string {
   // 如果直接提供了 DATABASE_URL，优先使用
   if (process.env.DATABASE_URL) {
     return process.env.DATABASE_URL;

@@ -2,6 +2,7 @@ import { init } from "./system/init.js";
 import { createQueues } from "./queues/index.js";
 import { startWorkers } from "./workers/index.js";
 import { startApiServer } from "./api/server.js";
+import { closeDb } from "./system/db.js";
 
 async function main() {
   // 初始化 PgBoss（共享实例）
@@ -24,6 +25,7 @@ async function main() {
   // 优雅关闭
   const shutdown = async () => {
     console.info("Shutting down...");
+    await closeDb();
     await boss.stop();
     process.exit(0);
   };

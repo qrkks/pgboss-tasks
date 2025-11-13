@@ -41,12 +41,67 @@ pnpm install
 
 ## 配置
 
-创建 `.env` 文件：
+### 环境变量配置
+
+创建 `.env` 文件，配置以下环境变量：
+
+#### 方式 1：使用完整的 DATABASE_URL（推荐用于外部数据库）
 
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/database
-PORT=3001  # API 服务器端口（可选，默认 3001）
+# 数据库连接字符串（完整连接字符串）
+DATABASE_URL=postgresql://user:password@host:5432/database
+
+# API 服务器端口（默认: 3001）
+PORT=3001
 ```
+
+#### 方式 2：使用 POSTGRES_* 变量（推荐用于 docker-compose）
+
+```env
+# PostgreSQL 配置（会自动组合生成 DATABASE_URL）
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+POSTGRES_DB=database
+
+# API 服务器端口（默认: 3001）
+PORT=3001
+```
+
+### 配置说明
+
+**DATABASE_URL 的优先级：**
+
+1. 如果设置了 `DATABASE_URL`，直接使用（方式 1）
+2. 如果未设置 `DATABASE_URL`，会自动从 `POSTGRES_*` 变量组合生成（方式 2）
+
+**环境变量说明：**
+
+- **DATABASE_URL**（可选）：完整的 PostgreSQL 连接字符串
+  - 如果使用外部数据库，推荐直接设置此变量
+  - 格式：`postgresql://用户名:密码@主机:端口/数据库名`
+  - 密码中的特殊字符会自动进行 URL 编码
+
+- **POSTGRES_HOST**（可选）：数据库主机，默认 `postgres`（docker-compose 服务名）
+
+- **POSTGRES_PORT**（可选）：数据库端口，默认 `5432`
+
+- **POSTGRES_USER**（可选）：数据库用户名，默认 `user`
+
+- **POSTGRES_PASSWORD**（可选）：数据库密码，默认 `password`
+  - 特殊字符会自动进行 URL 编码，无需手动处理
+
+- **POSTGRES_DB**（可选）：数据库名称，默认 `database`
+
+- **PORT**（可选）：API 服务器端口，默认 `3001`
+
+**使用建议：**
+
+- 使用 docker-compose：只需配置 `POSTGRES_*` 变量，`DATABASE_URL` 会自动生成
+- 使用外部数据库：直接配置 `DATABASE_URL` 即可
+
+**注意：** `.env` 文件已添加到 `.gitignore`，不会被提交到版本控制。
 
 ## 使用方法
 
@@ -208,6 +263,12 @@ app.post("/api/jobs/new-job", async (c) => {
 项目已包含优化的 Dockerfile 和 docker-compose.yml 文件。
 
 ### 快速开始
+
+1. 配置环境变量：
+
+创建 `.env` 文件，参考上面的"配置"章节，设置数据库连接等信息。
+
+2. 构建并启动：
 
 ```bash
 # 构建并启动

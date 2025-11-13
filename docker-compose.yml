@@ -6,16 +6,25 @@ services:
       context: .
       dockerfile: Dockerfile
     command: node dist/combined.js
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/database
-      - PORT=3001
+      # 如果 .env 中设置了 DATABASE_URL 则使用，否则代码会自动从 POSTGRES_* 生成
+      - DATABASE_URL=${DATABASE_URL:-}
+      - PORT=${PORT:-3001}
+      # PostgreSQL 配置（如果未设置 DATABASE_URL，代码会使用这些变量自动生成）
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-database}
     ports:
-      - "3001:3001"
+      - "${PORT:-3001}:${PORT:-3001}"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-3001}/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -30,20 +39,22 @@ services:
 
   postgres:
     image: postgres:15-alpine
+    env_file:
+      - .env
     environment:
-      - POSTGRES_DB=database
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=${POSTGRES_DB:-database}
+      - POSTGRES_USER=${POSTGRES_USER:-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d database"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-database}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
 
 volumes:
   postgres_data:

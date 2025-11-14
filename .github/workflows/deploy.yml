@@ -149,24 +149,64 @@ jobs:
             fi
             
             echo "=== Service Status ==="
-            \$DOCKER_COMPOSE ps
+            \$DOCKER_COMPOSE ps -a
+            
+            echo ""
+            echo "=== Checking tasks container ==="
+            # 检查 tasks 容器是否存在
+            TASKS_CONTAINER=\$(docker ps -a --filter "name=pgboss-tasks-tasks" --format "{{.Names}}" | head -1 || echo "")
+            if [ -z "\$TASKS_CONTAINER" ]; then
+              echo "Error: tasks container not found!"
+              echo "All containers:"
+              docker ps -a | grep pgboss-tasks || true
+              echo ""
+              echo "Tasks container logs:"
+              \$DOCKER_COMPOSE logs --tail=100 tasks 2>&1 || true
+              exit 1
+            fi
+            
+            # 检查 tasks 容器是否在运行
+            TASKS_STATE=\$(docker inspect --format='{{.State.Status}}' "\$TASKS_CONTAINER" 2>/dev/null || echo "unknown")
+            if [ "\$TASKS_STATE" != "running" ]; then
+              echo "Error: tasks container is not running. State: \$TASKS_STATE"
+              echo "Container: \$TASKS_CONTAINER"
+              echo ""
+              echo "Tasks container logs:"
+              \$DOCKER_COMPOSE logs --tail=100 tasks 2>&1 || true
+              echo ""
+              echo "Container exit code:"
+              docker inspect --format='{{.State.ExitCode}}' "\$TASKS_CONTAINER" 2>/dev/null || echo "unknown"
+              exit 1
+            fi
+            
+            echo "Tasks container is running: \$TASKS_CONTAINER"
+            echo "Waiting for service to be ready..."
+            sleep 5
             
             echo ""
             echo "=== Service Health Check ==="
-            # 尝试健康检查，最多重试3次
-            for i in {1..3}; do
+            # 尝试健康检查，最多重试5次
+            HEALTH_CHECK_PASSED=false
+            for i in {1..5}; do
               if \$DOCKER_COMPOSE exec -T tasks wget --quiet --tries=1 --spider http://localhost:3001/health 2>/dev/null; then
                 echo "Health check passed!"
-                exit 0
+                HEALTH_CHECK_PASSED=true
+                break
               fi
               echo "Health check attempt \$i failed, retrying..."
               sleep 5
             done
             
-            echo "Health check failed after 3 attempts"
-            echo "Service logs:"
-            \$DOCKER_COMPOSE logs --tail=50 tasks || true
-            exit 1
+            if [ "\$HEALTH_CHECK_PASSED" = "false" ]; then
+              echo "Health check failed after 5 attempts"
+              echo ""
+              echo "Tasks container logs:"
+              \$DOCKER_COMPOSE logs --tail=100 tasks || true
+              echo ""
+              echo "Tasks container status:"
+              \$DOCKER_COMPOSE ps tasks || true
+              exit 1
+            fi
           EOF
 
       - name: Cleanup

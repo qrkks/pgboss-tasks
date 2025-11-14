@@ -66,19 +66,24 @@ fi
 
 # 加载 Docker 镜像
 echo ""
-echo "=== Loading Docker image ==="
-if [ -f "/tmp/pgboss-tasks-image.tar.gz" ]; then
-  echo "Loading image from /tmp/pgboss-tasks-image.tar.gz..."
-  docker load < /tmp/pgboss-tasks-image.tar.gz || {
-    echo "Error: Failed to load Docker image!"
+echo "=== Loading Docker images ==="
+if [ -f "/tmp/docker-images.tar.gz" ]; then
+  echo "Loading images from /tmp/docker-images.tar.gz..."
+  docker load < /tmp/docker-images.tar.gz || {
+    echo "Error: Failed to load Docker images!"
     exit 1
   }
-  echo "Image loaded successfully"
+  echo "Images loaded successfully"
+  
+  # 显示已加载的镜像
+  echo "Loaded images:"
+  docker images | grep -E "(pgboss-tasks|postgres)" || true
   
   # 清理压缩的镜像文件
-  rm -f /tmp/pgboss-tasks-image.tar.gz
+  rm -f /tmp/docker-images.tar.gz
 else
-  echo "Warning: Image file not found. Using existing image if available."
+  echo "Warning: Image file not found. Using existing images if available."
+  echo "Note: If images don't exist, docker-compose will try to pull them from Docker Hub."
 fi
 
 # 停止旧服务（优雅停止）

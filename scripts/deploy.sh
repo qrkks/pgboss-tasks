@@ -5,20 +5,43 @@ set -e
 DEPLOY_PATH="${1:-/home/$USER/pgboss-tasks}"
 GIT_BRANCH="${2:-main}"
 GIT_COMMIT="${3:-}"
+GIT_REPO_URL="${4:-}"
 
 echo "=========================================="
 echo "Starting deployment..."
 echo "Deploy path: $DEPLOY_PATH"
 echo "Git branch: $GIT_BRANCH"
 echo "Git commit: $GIT_COMMIT"
+echo "Git repo: ${GIT_REPO_URL:-not provided}"
 echo "=========================================="
 
-# 检查部署路径是否存在
+# 检查部署路径是否存在，如果不存在则尝试克隆
 if [ ! -d "$DEPLOY_PATH" ]; then
-  echo "Error: Deployment path does not exist: $DEPLOY_PATH"
-  echo "Please clone the repository first:"
-  echo "  git clone <repository-url> $DEPLOY_PATH"
-  exit 1
+  if [ -z "$GIT_REPO_URL" ]; then
+    echo "Error: Deployment path does not exist: $DEPLOY_PATH"
+    echo "Please clone the repository first:"
+    echo "  git clone <repository-url> $DEPLOY_PATH"
+    echo "Or provide GIT_REPO_URL as the 4th parameter to auto-clone."
+    exit 1
+  fi
+  
+  echo "Deployment path does not exist. Cloning repository..."
+  echo "Repository URL: $GIT_REPO_URL"
+  
+  # 创建父目录
+  mkdir -p "$(dirname "$DEPLOY_PATH")"
+  
+  # 克隆仓库
+  git clone -b "$GIT_BRANCH" "$GIT_REPO_URL" "$DEPLOY_PATH" || {
+    echo "Error: Failed to clone repository"
+    echo "Please ensure:"
+    echo "  1. The repository URL is correct"
+    echo "  2. The server has access to the repository (SSH key or credentials configured)"
+    echo "  3. The branch '$GIT_BRANCH' exists"
+    exit 1
+  }
+  
+  echo "Repository cloned successfully"
 fi
 
 # 进入项目目录

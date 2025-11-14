@@ -78,6 +78,7 @@ jobs:
           DEPLOY_PATH: ${{ steps.set-path.outputs.path }}
           GIT_BRANCH: ${{ github.ref_name }}
           GIT_COMMIT: ${{ github.sha }}
+          GIT_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
         run: |
           set +x  # 隐藏密码
           export SSHPASS="$SSH_PASSWORD"
@@ -90,7 +91,7 @@ jobs:
           sshpass -e ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << EOF
             set -e
             chmod +x /tmp/deploy.sh
-            /tmp/deploy.sh "$DEPLOY_PATH" "$GIT_BRANCH" "$GIT_COMMIT"
+            /tmp/deploy.sh "$DEPLOY_PATH" "$GIT_BRANCH" "$GIT_COMMIT" "$GIT_REPO_URL"
           EOF
 
       - name: Verify deployment

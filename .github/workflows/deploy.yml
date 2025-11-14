@@ -1,0 +1,143 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  verify-build:
+    name: Verify Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (verify)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: pgboss-tasks:verify
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Server
+    needs: verify-build
+    runs-on: ubuntu-latest
+    if: success()
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Configure SSH
+        env:
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Set deployment path
+        id: set-path
+        env:
+          SERVER_DEPLOY_PATH: ${{ secrets.SERVER_DEPLOY_PATH }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          if [ -z "$SERVER_DEPLOY_PATH" ]; then
+            DEPLOY_PATH="/home/$SSH_USER/pgboss-tasks"
+          else
+            DEPLOY_PATH="$SERVER_DEPLOY_PATH"
+          fi
+          echo "path=$DEPLOY_PATH" >> $GITHUB_OUTPUT
+          echo "Deployment path: $DEPLOY_PATH"
+
+      - name: Deploy to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ steps.set-path.outputs.path }}
+          GIT_BRANCH: ${{ github.ref_name }}
+          GIT_COMMIT: ${{ github.sha }}
+        run: |
+          set +x  # 隐藏密码
+          export SSHPASS="$SSH_PASSWORD"
+          
+          # 传输部署脚本
+          sshpass -e scp -P $SSH_PORT -o StrictHostKeyChecking=no \
+            scripts/deploy.sh $SSH_USER@$SSH_HOST:/tmp/deploy.sh
+          
+          # 执行部署
+          sshpass -e ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << EOF
+            set -e
+            chmod +x /tmp/deploy.sh
+            /tmp/deploy.sh "$DEPLOY_PATH" "$GIT_BRANCH" "$GIT_COMMIT"
+          EOF
+
+      - name: Verify deployment
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ steps.set-path.outputs.path }}
+        run: |
+          set +x
+          export SSHPASS="$SSH_PASSWORD"
+          
+          # 等待服务启动
+          echo "Waiting for services to start..."
+          sleep 15
+          
+          # 检查服务状态
+          sshpass -e ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST bash -s << EOF
+            set -e
+            cd "$DEPLOY_PATH"
+            
+            # 检测 docker-compose 命令
+            if docker compose version &> /dev/null; then
+              DOCKER_COMPOSE="docker compose"
+            else
+              DOCKER_COMPOSE="docker-compose"
+            fi
+            
+            echo "=== Service Status ==="
+            \$DOCKER_COMPOSE ps
+            
+            echo ""
+            echo "=== Service Health Check ==="
+            # 尝试健康检查，最多重试3次
+            for i in {1..3}; do
+              if \$DOCKER_COMPOSE exec -T tasks wget --quiet --tries=1 --spider http://localhost:3001/health 2>/dev/null; then
+                echo "Health check passed!"
+                exit 0
+              fi
+              echo "Health check attempt \$i failed, retrying..."
+              sleep 5
+            done
+            
+            echo "Health check failed after 3 attempts"
+            echo "Service logs:"
+            \$DOCKER_COMPOSE logs --tail=50 tasks || true
+            exit 1
+          EOF
+

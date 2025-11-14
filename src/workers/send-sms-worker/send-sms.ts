@@ -20,7 +20,7 @@ const url = `${baseUrl}?action=${action}&accessKeyId=${accessKeyId}`;
 
 async function sendSms() {
   const body = {
-    to: "15866766321", // 接收号码
+    to: process.env.PHONE, // 接收号码
     signature: "1234567890", // 你报备并审核通过的签名（注意不是 AccessKey）
     templateId: "signup", // 模板编码
     templateData: {

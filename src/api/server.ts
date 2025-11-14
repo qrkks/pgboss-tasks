@@ -54,7 +54,8 @@ export async function startApiServer(boss: PgBoss, port: number = 3001) {
       return c.json({ 
         success: true, 
         jobId: id,
-        queue: "send-email-queue"
+        queue: "send-email-queue",
+        data: body
       });
     } catch (error) {
       console.error("Failed to send email job:", error);

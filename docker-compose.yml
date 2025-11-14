@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   tasks:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: pgboss-tasks:latest
     command: node dist/combined.js
     env_file:
       - .env

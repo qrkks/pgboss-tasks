@@ -8,10 +8,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  verify-build:
-    name: Verify Build
+  build-and-deploy:
+    name: Build and Deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,26 +20,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (verify)
+      - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: false
-          tags: pgboss-tasks:verify
+          tags: pgboss-tasks:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          load: true
 
-  deploy:
-    name: Deploy to Server
-    needs: verify-build
-    runs-on: ubuntu-latest
-    if: success()
-    timeout-minutes: 20
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Save Docker image
+        run: |
+          docker save pgboss-tasks:latest | gzip > pgboss-tasks-image.tar.gz
+          ls -lh pgboss-tasks-image.tar.gz
 
       - name: Install sshpass
         run: |
@@ -69,6 +65,35 @@ jobs:
           echo "path=$DEPLOY_PATH" >> $GITHUB_OUTPUT
           echo "Deployment path: $DEPLOY_PATH"
 
+      - name: Transfer image and files to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ steps.set-path.outputs.path }}
+        run: |
+          set +x  # 隐藏密码
+          export SSHPASS="$SSH_PASSWORD"
+          
+          # 创建部署目录
+          sshpass -e ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << EOF
+            mkdir -p "$DEPLOY_PATH"
+          EOF
+          
+          # 传输镜像文件
+          echo "Transferring Docker image (this may take a while)..."
+          sshpass -e scp -P $SSH_PORT -o StrictHostKeyChecking=no \
+            pgboss-tasks-image.tar.gz $SSH_USER@$SSH_HOST:/tmp/pgboss-tasks-image.tar.gz
+          
+          # 传输 docker-compose.yml
+          sshpass -e scp -P $SSH_PORT -o StrictHostKeyChecking=no \
+            docker-compose.yml $SSH_USER@$SSH_HOST:$DEPLOY_PATH/docker-compose.yml
+          
+          # 传输部署脚本
+          sshpass -e scp -P $SSH_PORT -o StrictHostKeyChecking=no \
+            scripts/deploy.sh $SSH_USER@$SSH_HOST:/tmp/deploy.sh
+
       - name: Deploy to server
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -76,22 +101,16 @@ jobs:
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
           SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
           DEPLOY_PATH: ${{ steps.set-path.outputs.path }}
-          GIT_BRANCH: ${{ github.ref_name }}
           GIT_COMMIT: ${{ github.sha }}
-          GIT_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
         run: |
           set +x  # 隐藏密码
           export SSHPASS="$SSH_PASSWORD"
-          
-          # 传输部署脚本
-          sshpass -e scp -P $SSH_PORT -o StrictHostKeyChecking=no \
-            scripts/deploy.sh $SSH_USER@$SSH_HOST:/tmp/deploy.sh
           
           # 执行部署
           sshpass -e ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << EOF
             set -e
             chmod +x /tmp/deploy.sh
-            /tmp/deploy.sh "$DEPLOY_PATH" "$GIT_BRANCH" "$GIT_COMMIT" "$GIT_REPO_URL"
+            /tmp/deploy.sh "$DEPLOY_PATH" "$GIT_COMMIT"
           EOF
 
       - name: Verify deployment
@@ -142,3 +161,19 @@ jobs:
             exit 1
           EOF
 
+      - name: Cleanup
+        if: always()
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+        run: |
+          set +x
+          export SSHPASS="$SSH_PASSWORD"
+          
+          # 清理服务器上的临时文件
+          sshpass -e ssh -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << EOF || true
+            rm -f /tmp/pgboss-tasks-image.tar.gz
+            rm -f /tmp/deploy.sh
+          EOF

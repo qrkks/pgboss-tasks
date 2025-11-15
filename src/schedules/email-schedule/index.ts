@@ -42,31 +42,31 @@ export async function initEmailSchedule(boss: PgBoss) {
       return;
     }
 
-    // 使用唯一的 schedule name 来避免重复创建
-    // PgBoss schedule 方法签名可能是: schedule(name, queue, cron, data, options)
-    // 或者: schedule(queue, cron, data, options)
-    // 我们尝试使用 name 参数来确保唯一性
+    // 注意：PgBoss 的 schedule 方法签名是: schedule(queue, cron, data, options)
+    // 不支持 name 作为第一个参数（会导致 "Constraint error, got value 0 expected range 1-12"）
+    // 但 unschedule 方法支持通过 name 来取消任务
     const morningScheduleName = "email-morning-9-58";
     const afternoonScheduleName = "email-afternoon-14-58";
 
+    // 先尝试取消可能已存在的定时任务（避免重复创建）
+    // unschedule 方法支持通过 name 来识别任务
     try {
-      // 先尝试取消可能已存在的定时任务（如果 API 支持）
       try {
         await (boss as any).unschedule(morningScheduleName);
-        console.log(`Unscheduled existing morning email job`);
+        console.log(`[Email Schedule] Unscheduled existing morning email job`);
       } catch (e) {
         // 如果不存在或 API 不支持，忽略错误
       }
 
       try {
         await (boss as any).unschedule(afternoonScheduleName);
-        console.log(`Unscheduled existing afternoon email job`);
+        console.log(`[Email Schedule] Unscheduled existing afternoon email job`);
       } catch (e) {
         // 如果不存在或 API 不支持，忽略错误
       }
     } catch (e) {
       // unschedule 方法可能不存在，忽略
-      console.log("Note: unschedule method not available, continuing...");
+      console.log("[Email Schedule] Note: unschedule method not available, continuing...");
     }
 
     // 上午 9:58 的定时任务
@@ -77,8 +77,8 @@ export async function initEmailSchedule(boss: PgBoss) {
     let morningScheduleSuccess = false;
     try {
       console.log(`[Email Schedule] Creating morning schedule (9:58 AM, Asia/Shanghai)...`);
+      // 使用不带 name 的方式：schedule(queue, cron, data, options)
       morningScheduleId = await (boss as any).schedule(
-        morningScheduleName,
         "send-email-queue",
         "58 9 * * *", // 每天上午 9:58
         emailData,
@@ -89,24 +89,8 @@ export async function initEmailSchedule(boss: PgBoss) {
       morningScheduleSuccess = true;
       console.log(`[Email Schedule] ✓ Morning schedule created successfully: ${morningScheduleId || "created"}`);
     } catch (e: any) {
-      // 如果参数顺序不对，尝试不使用 name 的方式
-      console.log(`[Email Schedule] First attempt failed, trying schedule without name parameter...`);
-      console.log(`[Email Schedule] Error: ${e?.message || e}`);
-      try {
-        morningScheduleId = await (boss as any).schedule(
-          "send-email-queue",
-          "58 9 * * *",
-          emailData,
-          {
-            tz: "Asia/Shanghai",
-          }
-        );
-        morningScheduleSuccess = true;
-        console.log(`[Email Schedule] ✓ Morning schedule created successfully (without name): ${morningScheduleId || "created"}`);
-      } catch (e2: any) {
-        console.error(`[Email Schedule] ✗ Failed to create morning schedule: ${e2?.message || e2}`);
-        throw e2;
-      }
+      console.error(`[Email Schedule] ✗ Failed to create morning schedule: ${e?.message || e}`);
+      throw e;
     }
 
     // 下午 2:58 的定时任务
@@ -116,8 +100,8 @@ export async function initEmailSchedule(boss: PgBoss) {
     let afternoonScheduleSuccess = false;
     try {
       console.log(`[Email Schedule] Creating afternoon schedule (2:58 PM, Asia/Shanghai)...`);
+      // 使用不带 name 的方式：schedule(queue, cron, data, options)
       afternoonScheduleId = await (boss as any).schedule(
-        afternoonScheduleName,
         "send-email-queue",
         "58 14 * * *", // 每天下午 2:58
         emailData,
@@ -128,24 +112,8 @@ export async function initEmailSchedule(boss: PgBoss) {
       afternoonScheduleSuccess = true;
       console.log(`[Email Schedule] ✓ Afternoon schedule created successfully: ${afternoonScheduleId || "created"}`);
     } catch (e: any) {
-      // 如果参数顺序不对，尝试不使用 name 的方式
-      console.log(`[Email Schedule] First attempt failed, trying schedule without name parameter...`);
-      console.log(`[Email Schedule] Error: ${e?.message || e}`);
-      try {
-        afternoonScheduleId = await (boss as any).schedule(
-          "send-email-queue",
-          "58 14 * * *",
-          emailData,
-          {
-            tz: "Asia/Shanghai",
-          }
-        );
-        afternoonScheduleSuccess = true;
-        console.log(`[Email Schedule] ✓ Afternoon schedule created successfully (without name): ${afternoonScheduleId || "created"}`);
-      } catch (e2: any) {
-        console.error(`[Email Schedule] ✗ Failed to create afternoon schedule: ${e2?.message || e2}`);
-        throw e2;
-      }
+      console.error(`[Email Schedule] ✗ Failed to create afternoon schedule: ${e?.message || e}`);
+      throw e;
     }
 
     // 总结

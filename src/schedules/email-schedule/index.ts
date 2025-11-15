@@ -12,6 +12,11 @@ interface SendEmailJobData {
  * 定时任务会直接发送到 send-email-queue 队列，由 workers/send-email-worker 处理
  */
 export async function initEmailSchedule(boss: PgBoss) {
+  // 记录当前时间，用于诊断
+  const now = new Date();
+  const nowStr = now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
+  console.log(`[Email Schedule] Initializing at ${nowStr} (Asia/Shanghai)`);
+
   // 邮件发送的数据
   const emailData: SendEmailJobData = {
     email: "34028312@qq.com",
@@ -69,7 +74,9 @@ export async function initEmailSchedule(boss: PgBoss) {
     // '58 9 * * *' 表示每天 9:58
     // 直接发送到 send-email-queue 队列，由 workers/send-email-worker 处理
     let morningScheduleId;
+    let morningScheduleSuccess = false;
     try {
+      console.log(`[Email Schedule] Creating morning schedule (9:58 AM, Asia/Shanghai)...`);
       morningScheduleId = await (boss as any).schedule(
         morningScheduleName,
         "send-email-queue",
@@ -79,25 +86,36 @@ export async function initEmailSchedule(boss: PgBoss) {
           tz: "Asia/Shanghai", // 使用中国时区
         }
       );
+      morningScheduleSuccess = true;
+      console.log(`[Email Schedule] ✓ Morning schedule created successfully: ${morningScheduleId || "created"}`);
     } catch (e: any) {
       // 如果参数顺序不对，尝试不使用 name 的方式
-      console.log("Trying schedule without name parameter...");
-      morningScheduleId = await (boss as any).schedule(
-        "send-email-queue",
-        "58 9 * * *",
-        emailData,
-        {
-          tz: "Asia/Shanghai",
-        }
-      );
+      console.log(`[Email Schedule] First attempt failed, trying schedule without name parameter...`);
+      console.log(`[Email Schedule] Error: ${e?.message || e}`);
+      try {
+        morningScheduleId = await (boss as any).schedule(
+          "send-email-queue",
+          "58 9 * * *",
+          emailData,
+          {
+            tz: "Asia/Shanghai",
+          }
+        );
+        morningScheduleSuccess = true;
+        console.log(`[Email Schedule] ✓ Morning schedule created successfully (without name): ${morningScheduleId || "created"}`);
+      } catch (e2: any) {
+        console.error(`[Email Schedule] ✗ Failed to create morning schedule: ${e2?.message || e2}`);
+        throw e2;
+      }
     }
-    console.log(`Scheduled morning email job: ${morningScheduleId || "created"}`);
 
     // 下午 2:58 的定时任务
     // '58 14 * * *' 表示每天 14:58
     // 直接发送到 send-email-queue 队列，由 workers/send-email-worker 处理
     let afternoonScheduleId;
+    let afternoonScheduleSuccess = false;
     try {
+      console.log(`[Email Schedule] Creating afternoon schedule (2:58 PM, Asia/Shanghai)...`);
       afternoonScheduleId = await (boss as any).schedule(
         afternoonScheduleName,
         "send-email-queue",
@@ -107,20 +125,42 @@ export async function initEmailSchedule(boss: PgBoss) {
           tz: "Asia/Shanghai", // 使用中国时区
         }
       );
+      afternoonScheduleSuccess = true;
+      console.log(`[Email Schedule] ✓ Afternoon schedule created successfully: ${afternoonScheduleId || "created"}`);
     } catch (e: any) {
       // 如果参数顺序不对，尝试不使用 name 的方式
-      afternoonScheduleId = await (boss as any).schedule(
-        "send-email-queue",
-        "58 14 * * *",
-        emailData,
-        {
-          tz: "Asia/Shanghai",
-        }
-      );
+      console.log(`[Email Schedule] First attempt failed, trying schedule without name parameter...`);
+      console.log(`[Email Schedule] Error: ${e?.message || e}`);
+      try {
+        afternoonScheduleId = await (boss as any).schedule(
+          "send-email-queue",
+          "58 14 * * *",
+          emailData,
+          {
+            tz: "Asia/Shanghai",
+          }
+        );
+        afternoonScheduleSuccess = true;
+        console.log(`[Email Schedule] ✓ Afternoon schedule created successfully (without name): ${afternoonScheduleId || "created"}`);
+      } catch (e2: any) {
+        console.error(`[Email Schedule] ✗ Failed to create afternoon schedule: ${e2?.message || e2}`);
+        throw e2;
+      }
     }
-    console.log(`Scheduled afternoon email job: ${afternoonScheduleId || "created"}`);
 
-    console.log("Email schedule initialized successfully");
+    // 总结
+    console.log(`[Email Schedule] ========================================`);
+    console.log(`[Email Schedule] Schedule initialization summary:`);
+    console.log(`[Email Schedule]   Current time: ${nowStr} (Asia/Shanghai)`);
+    console.log(`[Email Schedule]   Morning (9:58 AM): ${morningScheduleSuccess ? "✓ Created" : "✗ Failed"}`);
+    console.log(`[Email Schedule]   Afternoon (2:58 PM): ${afternoonScheduleSuccess ? "✓ Created" : "✗ Failed"}`);
+    console.log(`[Email Schedule] ========================================`);
+    
+    if (!morningScheduleSuccess || !afternoonScheduleSuccess) {
+      throw new Error("Failed to create one or more scheduled jobs");
+    }
+    
+    console.log("[Email Schedule] Email schedule initialized successfully");
   } catch (error) {
     console.error("Failed to initialize email schedule:", error);
     throw error;

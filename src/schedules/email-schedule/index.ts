@@ -43,8 +43,9 @@ export async function initEmailSchedule(boss: PgBoss) {
     }
 
     // 注意：PgBoss 的 schedule 方法签名是: schedule(queue, cron, data, options)
-    // 不支持 name 作为第一个参数（会导致 "Constraint error, got value 0 expected range 1-12"）
-    // 但 unschedule 方法支持通过 name 来取消任务
+    // 如果同一个队列有多个 schedule，需要在 options 中指定唯一的 name 来区分它们
+    // 否则后面的 schedule 可能会覆盖前面的（PgBoss 可能认为它们是同一个任务）
+    // unschedule 方法也支持通过 name 来取消任务
     const morningScheduleName = "email-morning-9-58";
     const afternoonScheduleName = "email-afternoon-14-58";
 
@@ -77,13 +78,14 @@ export async function initEmailSchedule(boss: PgBoss) {
     let morningScheduleSuccess = false;
     try {
       console.log(`[Email Schedule] Creating morning schedule (9:58 AM, Asia/Shanghai)...`);
-      // 使用不带 name 的方式：schedule(queue, cron, data, options)
+      // 在 options 中指定 name 来区分不同的定时任务
       morningScheduleId = await (boss as any).schedule(
         "send-email-queue",
         "58 9 * * *", // 每天上午 9:58
         emailData,
         {
           tz: "Asia/Shanghai", // 使用中国时区
+          name: morningScheduleName, // 指定唯一名称
         }
       );
       morningScheduleSuccess = true;
@@ -100,13 +102,14 @@ export async function initEmailSchedule(boss: PgBoss) {
     let afternoonScheduleSuccess = false;
     try {
       console.log(`[Email Schedule] Creating afternoon schedule (2:58 PM, Asia/Shanghai)...`);
-      // 使用不带 name 的方式：schedule(queue, cron, data, options)
+      // 在 options 中指定 name 来区分不同的定时任务
       afternoonScheduleId = await (boss as any).schedule(
         "send-email-queue",
         "58 14 * * *", // 每天下午 2:58
         emailData,
         {
           tz: "Asia/Shanghai", // 使用中国时区
+          name: afternoonScheduleName, // 指定唯一名称
         }
       );
       afternoonScheduleSuccess = true;

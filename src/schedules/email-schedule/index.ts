@@ -43,24 +43,25 @@ export async function initEmailSchedule(boss: PgBoss) {
     }
 
     // 注意：PgBoss 的 schedule 方法签名是: schedule(queue, cron, data, options)
-    // 如果同一个队列有多个 schedule，需要在 options 中指定唯一的 name 来区分它们
-    // 否则后面的 schedule 可能会覆盖前面的（PgBoss 可能认为它们是同一个任务）
-    // unschedule 方法也支持通过 name 来取消任务
-    const morningScheduleName = "email-morning-9-58";
-    const afternoonScheduleName = "email-afternoon-14-58";
+    // 如果同一个队列有多个 schedule，需要在 options 中指定唯一的 key 来区分它们
+    // PgBoss 使用 (queue, key) 作为联合主键来唯一标识定时任务
+    // 如果不指定 key，PgBoss 可能认为它们是同一个任务，后面的会覆盖前面的
+    // unschedule 方法也支持通过 key 来取消任务
+    const morningScheduleKey = "email-morning-9-58";
+    const afternoonScheduleKey = "email-afternoon-14-58";
 
     // 先尝试取消可能已存在的定时任务（避免重复创建）
-    // unschedule 方法支持通过 name 来识别任务
+    // unschedule 方法支持通过 key 来识别任务
     try {
       try {
-        await (boss as any).unschedule(morningScheduleName);
+        await (boss as any).unschedule("send-email-queue", morningScheduleKey);
         console.log(`[Email Schedule] Unscheduled existing morning email job`);
       } catch (e) {
         // 如果不存在或 API 不支持，忽略错误
       }
 
       try {
-        await (boss as any).unschedule(afternoonScheduleName);
+        await (boss as any).unschedule("send-email-queue", afternoonScheduleKey);
         console.log(`[Email Schedule] Unscheduled existing afternoon email job`);
       } catch (e) {
         // 如果不存在或 API 不支持，忽略错误
@@ -78,14 +79,15 @@ export async function initEmailSchedule(boss: PgBoss) {
     let morningScheduleSuccess = false;
     try {
       console.log(`[Email Schedule] Creating morning schedule (9:58 AM, Asia/Shanghai)...`);
-      // 在 options 中指定 name 来区分不同的定时任务
+      // 在 options 中指定 key 来区分不同的定时任务
+      // PgBoss 使用 (queue, key) 作为联合主键
       morningScheduleId = await (boss as any).schedule(
         "send-email-queue",
         "58 9 * * *", // 每天上午 9:58
         emailData,
         {
           tz: "Asia/Shanghai", // 使用中国时区
-          name: morningScheduleName, // 指定唯一名称
+          key: morningScheduleKey, // 指定唯一 key（与 queue 一起构成联合主键）
         }
       );
       morningScheduleSuccess = true;
@@ -102,14 +104,15 @@ export async function initEmailSchedule(boss: PgBoss) {
     let afternoonScheduleSuccess = false;
     try {
       console.log(`[Email Schedule] Creating afternoon schedule (2:58 PM, Asia/Shanghai)...`);
-      // 在 options 中指定 name 来区分不同的定时任务
+      // 在 options 中指定 key 来区分不同的定时任务
+      // PgBoss 使用 (queue, key) 作为联合主键
       afternoonScheduleId = await (boss as any).schedule(
         "send-email-queue",
         "58 14 * * *", // 每天下午 2:58
         emailData,
         {
           tz: "Asia/Shanghai", // 使用中国时区
-          name: afternoonScheduleName, // 指定唯一名称
+          key: afternoonScheduleKey, // 指定唯一 key（与 queue 一起构成联合主键）
         }
       );
       afternoonScheduleSuccess = true;

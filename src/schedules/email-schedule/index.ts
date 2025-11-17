@@ -83,7 +83,7 @@ export async function initEmailSchedule(boss: PgBoss) {
       // PgBoss 使用 (queue, key) 作为联合主键
       morningScheduleId = await (boss as any).schedule(
         "send-email-queue",
-        "58 9 * * *", // 每天上午 9:58
+        "55 9 * * *", // 每天上午 9:58
         emailData,
         {
           tz: "Asia/Shanghai", // 使用中国时区
@@ -108,7 +108,7 @@ export async function initEmailSchedule(boss: PgBoss) {
       // PgBoss 使用 (queue, key) 作为联合主键
       afternoonScheduleId = await (boss as any).schedule(
         "send-email-queue",
-        "58 14 * * *", // 每天下午 2:58
+        "55 14 * * *", // 每天下午 2:58
         emailData,
         {
           tz: "Asia/Shanghai", // 使用中国时区

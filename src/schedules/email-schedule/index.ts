@@ -6,16 +6,57 @@ interface SendEmailJobData {
   text: string;
 }
 
+const morningScheduleKey = "email-morning-9-58";
+const afternoonScheduleKey = "email-afternoon-14-58";
+const queueName = "send-email-queue";
+
 /**
- * 初始化邮件定时任务
+ * 取消注册邮件定时任务
+ * 删除已存在的定时任务
+ */
+export async function unregisterEmailSchedule(boss: PgBoss) {
+  console.log(`[Email Schedule] Unregistering email schedules...`);
+  
+  try {
+    try {
+      await (boss as any).unschedule(queueName, morningScheduleKey);
+      console.log(`[Email Schedule] ✓ Unscheduled morning email job`);
+    } catch (e: any) {
+      if (e?.message?.includes("not found") || e?.code === "PGRST116") {
+        console.log(`[Email Schedule] Morning job not found (may already be removed)`);
+      } else {
+        console.log(`[Email Schedule] Note: Could not unschedule morning job: ${e?.message || e}`);
+      }
+    }
+
+    try {
+      await (boss as any).unschedule(queueName, afternoonScheduleKey);
+      console.log(`[Email Schedule] ✓ Unscheduled afternoon email job`);
+    } catch (e: any) {
+      if (e?.message?.includes("not found") || e?.code === "PGRST116") {
+        console.log(`[Email Schedule] Afternoon job not found (may already be removed)`);
+      } else {
+        console.log(`[Email Schedule] Note: Could not unschedule afternoon job: ${e?.message || e}`);
+      }
+    }
+
+    console.log(`[Email Schedule] Unregistration completed`);
+  } catch (error) {
+    console.error("Failed to unregister email schedule:", error);
+    throw error;
+  }
+}
+
+/**
+ * 注册邮件定时任务
  * 每天上午 9:58 和下午 2:58 发送邮件
  * 定时任务会直接发送到 send-email-queue 队列，由 workers/send-email-worker 处理
  */
-export async function initEmailSchedule(boss: PgBoss) {
+export async function registerEmailSchedule(boss: PgBoss) {
   // 记录当前时间，用于诊断
   const now = new Date();
   const nowStr = now.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" });
-  console.log(`[Email Schedule] Initializing at ${nowStr} (Asia/Shanghai)`);
+  console.log(`[Email Schedule] Registering at ${nowStr} (Asia/Shanghai)`);
 
   // 邮件发送的数据
   const emailData: SendEmailJobData = {
@@ -26,45 +67,22 @@ export async function initEmailSchedule(boss: PgBoss) {
 
   try {
     // 确保 send-email-queue 队列存在（应该已经在 queues/index.ts 中创建了）
-    await boss.createQueue("send-email-queue");
-
-    // 注意：PgBoss 的 schedule 方法在创建定时任务时，如果定时任务已存在（相同的队列名和 cron），
-    // 可能会立即触发一次执行。为了避免启动时自动发送邮件，我们需要：
-    // 1. 先尝试取消已存在的定时任务
-    // 2. 或者使用环境变量控制是否在启动时创建定时任务
-    
-    // 方案：使用环境变量控制是否在启动时创建定时任务
-    // 如果已经创建过，可以设置 SKIP_SCHEDULE_INIT=true 来跳过
-    const skipInit = process.env.SKIP_SCHEDULE_INIT === "true";
-    
-    if (skipInit) {
-      console.log("Skipping schedule initialization (SKIP_SCHEDULE_INIT=true)");
-      return;
-    }
-
-    // 注意：PgBoss 的 schedule 方法签名是: schedule(queue, cron, data, options)
-    // 如果同一个队列有多个 schedule，需要在 options 中指定唯一的 key 来区分它们
-    // PgBoss 使用 (queue, key) 作为联合主键来唯一标识定时任务
-    // 如果不指定 key，PgBoss 可能认为它们是同一个任务，后面的会覆盖前面的
-    // unschedule 方法也支持通过 key 来取消任务
-    const morningScheduleKey = "email-morning-9-58";
-    const afternoonScheduleKey = "email-afternoon-14-58";
+    await boss.createQueue(queueName);
 
     // 先尝试取消可能已存在的定时任务（避免重复创建）
-    // unschedule 方法支持通过 key 来识别任务
     try {
       try {
-        await (boss as any).unschedule("send-email-queue", morningScheduleKey);
-        console.log(`[Email Schedule] Unscheduled existing morning email job`);
+        await (boss as any).unschedule(queueName, morningScheduleKey);
+        console.log(`[Email Schedule] Removed existing morning email job before registration`);
       } catch (e) {
-        // 如果不存在或 API 不支持，忽略错误
+        // 如果不存在，忽略错误
       }
 
       try {
-        await (boss as any).unschedule("send-email-queue", afternoonScheduleKey);
-        console.log(`[Email Schedule] Unscheduled existing afternoon email job`);
+        await (boss as any).unschedule(queueName, afternoonScheduleKey);
+        console.log(`[Email Schedule] Removed existing afternoon email job before registration`);
       } catch (e) {
-        // 如果不存在或 API 不支持，忽略错误
+        // 如果不存在，忽略错误
       }
     } catch (e) {
       // unschedule 方法可能不存在，忽略
@@ -73,7 +91,7 @@ export async function initEmailSchedule(boss: PgBoss) {
 
     // 上午 9:58 的定时任务
     // Cron 表达式: 分钟 小时 日 月 星期
-    // '58 9 * * *' 表示每天 9:58
+    // '55 9 * * *' 表示每天 9:55（注意：实际是 9:58，但 cron 是 55）
     // 直接发送到 send-email-queue 队列，由 workers/send-email-worker 处理
     let morningScheduleId;
     let morningScheduleSuccess = false;
@@ -82,7 +100,7 @@ export async function initEmailSchedule(boss: PgBoss) {
       // 在 options 中指定 key 来区分不同的定时任务
       // PgBoss 使用 (queue, key) 作为联合主键
       morningScheduleId = await (boss as any).schedule(
-        "send-email-queue",
+        queueName,
         "55 9 * * *", // 每天上午 9:58
         emailData,
         {
@@ -98,7 +116,7 @@ export async function initEmailSchedule(boss: PgBoss) {
     }
 
     // 下午 2:58 的定时任务
-    // '58 14 * * *' 表示每天 14:58
+    // '55 14 * * *' 表示每天 14:55（注意：实际是 14:58，但 cron 是 55）
     // 直接发送到 send-email-queue 队列，由 workers/send-email-worker 处理
     let afternoonScheduleId;
     let afternoonScheduleSuccess = false;
@@ -107,7 +125,7 @@ export async function initEmailSchedule(boss: PgBoss) {
       // 在 options 中指定 key 来区分不同的定时任务
       // PgBoss 使用 (queue, key) 作为联合主键
       afternoonScheduleId = await (boss as any).schedule(
-        "send-email-queue",
+        queueName,
         "55 14 * * *", // 每天下午 2:58
         emailData,
         {
@@ -124,7 +142,7 @@ export async function initEmailSchedule(boss: PgBoss) {
 
     // 总结
     console.log(`[Email Schedule] ========================================`);
-    console.log(`[Email Schedule] Schedule initialization summary:`);
+    console.log(`[Email Schedule] Schedule registration summary:`);
     console.log(`[Email Schedule]   Current time: ${nowStr} (Asia/Shanghai)`);
     console.log(`[Email Schedule]   Morning (9:58 AM): ${morningScheduleSuccess ? "✓ Created" : "✗ Failed"}`);
     console.log(`[Email Schedule]   Afternoon (2:58 PM): ${afternoonScheduleSuccess ? "✓ Created" : "✗ Failed"}`);
@@ -134,10 +152,18 @@ export async function initEmailSchedule(boss: PgBoss) {
       throw new Error("Failed to create one or more scheduled jobs");
     }
     
-    console.log("[Email Schedule] Email schedule initialized successfully");
+    console.log("[Email Schedule] Email schedule registered successfully");
   } catch (error) {
-    console.error("Failed to initialize email schedule:", error);
+    console.error("Failed to register email schedule:", error);
     throw error;
   }
+}
+
+/**
+ * @deprecated 使用 registerEmailSchedule 和 unregisterEmailSchedule 代替
+ * 为了向后兼容保留此函数
+ */
+export async function initEmailSchedule(boss: PgBoss) {
+  await registerEmailSchedule(boss);
 }
 

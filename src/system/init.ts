@@ -8,11 +8,15 @@ export function getDatabaseUrl(): string {
   }
 
   // 否则从 POSTGRES_* 环境变量组合生成
-  const host = process.env.POSTGRES_HOST || "postgres";
-  const port = process.env.POSTGRES_PORT || "5432";
-  const user = process.env.POSTGRES_USER || "user";
-  const password = process.env.POSTGRES_PASSWORD || "password";
-  const database = process.env.POSTGRES_DB || "database";
+  const host = process.env.POSTGRES_HOST;
+  const port = process.env.POSTGRES_PORT;
+  const user = process.env.POSTGRES_USER;
+  const password = process.env.POSTGRES_PASSWORD;
+  const database = process.env.POSTGRES_DB;
+
+  if (!host || !port || !user || !password || !database) {
+    throw new Error("数据库连接信息未配置");
+  }
 
   // URL 编码密码（处理特殊字符）
   const encodedPassword = encodeURIComponent(password);
@@ -43,4 +47,3 @@ export async function init(): Promise<PgBoss> {
 
   return boss;
 }
-
